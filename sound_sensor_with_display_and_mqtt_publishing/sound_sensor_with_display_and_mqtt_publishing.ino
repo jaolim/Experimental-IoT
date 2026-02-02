@@ -46,7 +46,7 @@ const int PP_REF = 30;
 const char* POST_URL  = ENV_URL;
 const char* TEAM_NAME = "J&J";
 const char* LOCATION = ENV_LOCATION;
- 
+
 // ---------- Helpers ----------
  
 void printPadded(uint8_t col, uint8_t row, const String& text) {
@@ -251,7 +251,10 @@ void loop() {
     String oldRecord = "Old record: " + String(maxSound);
     maxSound = dbRel;
     postToSite(TEAM_NAME, newRecord, oldRecord);
-//    char* mqttRecord = "Record, " + String(dbRel, 1) + ";";
-    client.publish(topic, "New sound record");
-  }
+    String mqttRecord = "Record, " + String(dbRel, 1) + ";";
+    client.publish(topic, mqttRecord.c_str());
+  } else {
+    String mqttReading = "Reading, " + String(dbRel, 1) + ";";
+    client.publish(topic, mqttReading.c_str());
+   }
 }
