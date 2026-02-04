@@ -1,5 +1,5 @@
 /*
-Code written by ChatGpt
+Initial code written by ChatGPT
 A simple React client for listening a specific mqtt broker for a specific topic and posting the latest message
 */
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -25,6 +25,9 @@ export default function App() {
   const [latestJson, setLatestJson] = useState(null);
   const [latestTopic, setLatestTopic] = useState("");
   const [latestTime, setLatestTime] = useState(null);
+
+  const [messages, setMessages] = useState([]);
+  const [record, setRecord] = useState();
 
   const clientRef = useRef(null);
 
@@ -89,25 +92,35 @@ export default function App() {
       setStatus(`Error: ${err.message || String(err)}`);
     });
 
+
     client.on("message", (msgTopic, payload) => {
       const raw = payload?.toString?.() ?? "";
+
       setLatestTopic(msgTopic);
       setLatestTime(new Date());
       setLatestRaw(raw);
 
-      // Try to parse JSON; if it fails, keep null
-      try {
-        const parsed = JSON.parse(raw);
-        setLatestJson(parsed);
-      } catch {
-        setLatestJson(null);
-      }
+      setMessages(prev => [...prev, parseMessage(raw)]);
     });
   };
 
+  const parseMessage = (message) => {
+    const messageValues = message.split(';');
+    const messageAverage = Number(messageValues[0].split(',')[1].trim());
+    const messageMin = Number(messageValues[1].split(',')[1].trim());
+    const messageMax = Number(messageValues[2].split(',')[1].trim());
+    const parsedMessage = {
+      time: new Date(),
+      min: messageMin,
+      max: messageMax,
+      average: messageAverage
+    }
+    return parsedMessage;
+  }
+
   // Auto-connect on first render
   useEffect(() => {
-  //  connect();
+    //  connect();
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -220,6 +233,34 @@ export default function App() {
         </div>
 
         <div style={{ padding: 12, borderRadius: 12, border: "1px solid #eee" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Message history (raw)</div>
+          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
+            Topic: <b>{latestTopic || "-"}</b>
+            {latestTime ? (
+              <>
+                {" "}· Time: <b>{latestTime.toLocaleString()}</b>
+              </>
+            ) : null}
+          </div>
+          <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12 }}>
+            {JSON.stringify(messages) || "(no messages yet)"}
+          </pre>
+        </div>
+      </div>
+      <div>
+        <button onClick={() => setMessages([...messages, parseMessage("Average, 9.9; Min, 8.3; Max, 11.4;")])}>Test</button>
+      </div>
+
+      <div style={{ marginTop: 14, fontSize: 12, color: "#666" }}>
+        Tip: many MQTT brokers require WebSockets. Use <b>wss://</b> if you are serving this app over HTTPS.
+      </div>
+    </div>
+  );
+}
+
+/*
+//JSON element
+        <div style={{ padding: 12, borderRadius: 12, border: "1px solid #eee" }}>
           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Latest message (JSON)</div>
           {latestJson ? (
             <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12 }}>
@@ -231,12 +272,12 @@ export default function App() {
             </div>
           )}
         </div>
-      </div>
 
-      <div style={{ marginTop: 14, fontSize: 12, color: "#666" }}>
-        Tip: many MQTT brokers require WebSockets. Use <b>wss://</b> if you are serving this app over HTTPS.
-      </div>
-    </div>
-  );
-}
-
+              // Try to parse JSON; if it fails, keep null
+      try {
+        const parsed = JSON.parse(raw);
+        setLatestJson(parsed);
+      } catch {
+        setLatestJson(null);
+      }
+*/
