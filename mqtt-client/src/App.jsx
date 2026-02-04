@@ -4,6 +4,17 @@ A simple React client for listening a specific mqtt broker for a specific topic 
 */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import mqtt from "mqtt";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
 
 /**
  * Simple MQTT client React app
@@ -13,6 +24,58 @@ import mqtt from "mqtt";
  *
  */
 
+export function SoundChart({ data }) {
+  const chartData = data.map((d) => ({
+    ...d,
+    timeLabel: new Date(d.time).toLocaleTimeString(),
+  }));
+
+  // Compute tight Y domain (zoomed in)
+  const allValues = chartData.flatMap((d) => [d.min, d.max, d.average]).filter(Number.isFinite);
+
+  const minY = Math.min(...allValues);
+  const maxY = Math.max(...allValues);
+
+  // Add small padding so bars/line aren't stuck to edges
+  const padding = 0.3; // <-- adjust (0.2–1.0)
+  const domainMin = Math.floor((minY - padding) * 10) / 10; // round to 0.1
+  const domainMax = Math.ceil((maxY + padding) * 10) / 10;
+
+  return (
+    <ResponsiveContainer width="100%" height={340}>
+      <ComposedChart data={chartData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="timeLabel" interval="preserveStartEnd" />
+        <YAxis
+          domain={[domainMin, domainMax]}
+          tickCount={Math.min(20, Math.max(6, Math.round((domainMax - domainMin) * 10) + 1))}
+          tickFormatter={(v) => v.toFixed(1)}
+          allowDecimals={true}
+        />
+        <Tooltip
+          formatter={(value) => `${Number(value).toFixed(1)} dB`}
+          labelFormatter={(label) => `Time: ${label}`}
+        />
+        <Legend />
+
+        {/* Bars */}
+        <Bar dataKey="min" name="Min" fill="#3b82f6" />
+        <Bar dataKey="max" name="Max" fill="#ef4444" />
+
+        {/* Line */}
+        <Line
+          type="monotone"
+          dataKey="average"
+          name="Average"
+          stroke="#22c55e"
+          strokeWidth={3}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
 
 export default function App() {
   const [brokerUrl, setBrokerUrl] = useState('');
@@ -99,8 +162,10 @@ export default function App() {
       setLatestTopic(msgTopic);
       setLatestTime(new Date());
       setLatestRaw(raw);
+      if (raw.toLowerCase().includes('average')) {
+        setMessages(prev => [...prev, parseMessage(raw)]);
+      }
 
-      setMessages(prev => [...prev, parseMessage(raw)]);
     });
   };
 
@@ -144,6 +209,7 @@ export default function App() {
       <p style={{ marginTop: 6, color: "#555" }}>
         Simple standalone React MQTT client for IoT testing (WebSocket brokers).
       </p>
+      <SoundChart data={messages} />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
         <div>
@@ -257,27 +323,3 @@ export default function App() {
     </div>
   );
 }
-
-/*
-//JSON element
-        <div style={{ padding: 12, borderRadius: 12, border: "1px solid #eee" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Latest message (JSON)</div>
-          {latestJson ? (
-            <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12 }}>
-              {JSON.stringify(latestJson, null, 2)}
-            </pre>
-          ) : (
-            <div style={{ fontSize: 12, color: "#666" }}>
-              (Payload is not valid JSON, or no message received yet.)
-            </div>
-          )}
-        </div>
-
-              // Try to parse JSON; if it fails, keep null
-      try {
-        const parsed = JSON.parse(raw);
-        setLatestJson(parsed);
-      } catch {
-        setLatestJson(null);
-      }
-*/
