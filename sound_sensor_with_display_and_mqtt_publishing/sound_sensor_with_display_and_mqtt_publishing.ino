@@ -200,11 +200,20 @@ void loop() {
  
   int lastPP = 0;
   int lastMinV = 0, lastMaxV = 0;
- 
+
+  int lowestReading = -1;
+  int highestReading = -1;
+  
   while (millis() - start < UPDATE_INTERVAL_MS) {
     lastPP = readSoundPP(lastMinV, lastMaxV);
     sumPP += (uint32_t)lastPP;
     count++;
+    if (lowestReading == -1 || lowestReading > lastPP) {
+      lowestReading = lastPP;  
+    }
+    if (highestReading < lastPP) {
+      highestReading = lastPP;  
+    }
     delay(SAMPLE_EVERY_MS);
   }
  
@@ -212,6 +221,8 @@ void loop() {
  
   // Compute relative dB from avgPP
   float dbRel = ppToRelDb(avgPP, PP_REF);
+  float dbLowest = ppToRelDb(lowestReading, PP_REF);
+  float dbHighest = ppToRelDb(highestReading, PP_REF);
  
   bool loud = (avgPP > THRESHOLD);
  
@@ -250,11 +261,11 @@ void loop() {
     String newRecord = "New noise record: " + String(dbRel, 1);
     String oldRecord = "Old record: " + String(maxSound);
     maxSound = dbRel;
-    postToSite(TEAM_NAME, newRecord, oldRecord);
-    String mqttRecord = "Record, " + String(dbRel, 1) + ";";
-    client.publish(topic, mqttRecord.c_str());
-  } else {
-    String mqttReading = "Reading, " + String(dbRel, 1) + ";";
-    client.publish(topic, mqttReading.c_str());
-   }
+    //postToSite(TEAM_NAME, newRecord, oldRecord);
+  }
+  String mqttMessage = "Average, " + String(dbRel, 1) + "; " + 
+                        "Min, " + String(dbLowest, 1) + "; " +
+                        "Max, " + String(dbHighest, 1) + "; ";
+
+  client.publish(topic, mqttMessage.c_str());
 }
