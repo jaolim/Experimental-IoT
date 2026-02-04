@@ -47,6 +47,9 @@ const char* POST_URL  = ENV_URL;
 const char* TEAM_NAME = "J&J";
 const char* LOCATION = ENV_LOCATION;
 
+// Led
+const int LED_PIN = 2;
+
 // ---------- Helpers ----------
  
 void printPadded(uint8_t col, uint8_t row, const String& text) {
@@ -143,7 +146,9 @@ bool postToSite(const String& team, const String& message1, const String& messag
 void setup() {
   Serial.begin(115200);
   delay(100);
- 
+
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
   Wire.begin(LCD_SDA, LCD_SCL);
  
   analogReadResolution(12);
@@ -191,6 +196,7 @@ void setup() {
   printPadded(0, 1, WiFi.localIP().toString());
   delay(1000);
   lcd.clear();
+  digitalWrite(LED_PIN, LOW);
 }
  
 void loop() {
@@ -265,7 +271,7 @@ void loop() {
   }
   String mqttMessage = "Average, " + String(dbRel, 1) + "; " + 
                         "Min, " + String(dbLowest, 1) + "; " +
-                        "Max, " + String(dbHighest, 1) + "; ";
+                        "Max, " + String(dbHighest, 1) + ";";
 
   client.publish(topic, mqttMessage.c_str());
 }
