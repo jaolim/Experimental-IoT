@@ -8,6 +8,67 @@
 #include <math.h>   // <-- for log10f
 #include <PubSubClient.h>
 
+boolean setupMode = false;
+boolean publishMqtt = true;
+boolean publishLocal = true;
+
+// ESP32 Rotary Encoder + Button test (ROBUST quadrature decode)
+// Pins: CLK(A)=GPIO16, DT(B)=GPIO17, SW=GPIO18 (to GND, INPUT_PULLUP)
+// Serial Monitor: 115200
+ 
+const int PIN_A  = 16;   // CLK
+const int PIN_B  = 17;   // DT
+const int PIN_SW = 18;   // button
+ 
+// ---------- Encoder (quadrature state machine) ----------
+volatile long encoderPos = 0;
+volatile uint8_t prevAB = 0;
+ 
+// Transition table for quadrature decode (Gray code)
+// Index: (prev<<2) | curr, value: -1, 0, +1
+// This is a standard robust table that rejects invalid/bouncy transitions.
+const int8_t ENC_TABLE[16] = {
+  0, -1, +1,  0,
++1,  0,  0, -1,
+-1,  0,  0, +1,
+  0, +1, -1,  0
+};
+ 
+void IRAM_ATTR onEncChange() {
+  if (!setupMode) {
+    setupMode = true; 
+  }
+  uint8_t a = (uint8_t)digitalRead(PIN_A);
+  uint8_t b = (uint8_t)digitalRead(PIN_B);
+  uint8_t currAB = (a << 1) | b;
+ 
+  uint8_t idx = (prevAB << 2) | currAB;
+  int8_t step = ENC_TABLE[idx];
+ 
+  encoderPos += step;     // step = +1 or -1 or 0
+  prevAB = currAB;
+}
+ 
+// If your encoder gives 4 counts per detent, you can divide by 4 when printing.
+const int COUNTS_PER_DETENT = 4; // common for many encoders; set to 2 or 1 if needed
+ 
+long lastPrintedDetent = 0;
+ 
+// ---------- Button (single/double/long hold) ----------
+const unsigned long DEBOUNCE_MS   = 35;
+const unsigned long DOUBLE_TAP_MS = 350;
+const unsigned long LONG_HOLD_MS  = 700;
+ 
+bool stableBtn = HIGH;      // debounced stable state
+bool lastRawBtn = HIGH;
+unsigned long lastDebounceMs = 0;
+ 
+unsigned long pressStartMs = 0;
+bool longHoldFired = false;
+ 
+int tapCount = 0;
+unsigned long firstTapReleaseMs = 0;
+
 // MQTT Broker
 const char *mqtt_broker = ENV_BROKER;
 const char *topic = ENV_TOPIC;
@@ -147,6 +208,25 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
+  //Button setup
+  pinMode(PIN_A, INPUT_PULLUP);
+  pinMode(PIN_B, INPUT_PULLUP);
+  pinMode(PIN_SW, INPUT_PULLUP);
+ 
+  // Initialize previous state
+  uint8_t a = digitalRead(PIN_A);
+  uint8_t b = digitalRead(PIN_B);
+  prevAB = (a << 1) | b;
+ 
+  // Interrupt on BOTH pins gives best accuracy
+  attachInterrupt(digitalPinToInterrupt(PIN_A), onEncChange, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PIN_B), onEncChange, CHANGE);
+ 
+  Serial.println("=== Rotary Encoder (Robust) + Button Test ===");
+  Serial.println("Expected: Right -> +, Left -> -");
+  Serial.println("Button: SINGLE / DOUBLE / LONG HOLD");
+  Serial.println("--------------------------------------------");
+
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
   Wire.begin(LCD_SDA, LCD_SCL);
@@ -200,78 +280,152 @@ void setup() {
 }
  
 void loop() {
-  uint32_t start = millis();
-  uint32_t sumPP = 0;
-  uint16_t count = 0;
- 
-  int lastPP = 0;
-  int lastMinV = 0, lastMaxV = 0;
-
-  int lowestReading = -1;
-  int highestReading = -1;
-  
-  while (millis() - start < UPDATE_INTERVAL_MS) {
-    lastPP = readSoundPP(lastMinV, lastMaxV);
-    sumPP += (uint32_t)lastPP;
-    count++;
-    if (lowestReading == -1 || lowestReading > lastPP) {
-      lowestReading = lastPP;  
+  if (setupMode){
+      // ----- Encoder: read safely and print detents -----
+    long rawPos;
+    noInterrupts();
+    rawPos = encoderPos;
+    interrupts();
+   
+    // Convert raw counts to detents (so it doesn't "rise too fast")
+    long detentPos = rawPos / COUNTS_PER_DETENT;
+   
+    if (detentPos != lastPrintedDetent) {
+      Serial.print("Encoder detent position: ");
+      Serial.print(detentPos);
+      Serial.print(" (");
+      Serial.print(detentPos > lastPrintedDetent ? "RIGHT/+ " : "LEFT/- ");
+      Serial.println(")");
+      lastPrintedDetent = detentPos;
     }
-    if (highestReading < lastPP) {
-      highestReading = lastPP;  
+   
+    // ----- Button handling (debounced) -----
+    unsigned long now = millis();
+    bool rawBtn = digitalRead(PIN_SW); // HIGH idle, LOW pressed
+   
+    if (rawBtn != lastRawBtn) {
+      lastDebounceMs = now;
+      lastRawBtn = rawBtn;
     }
-    delay(SAMPLE_EVERY_MS);
-  }
- 
-  int avgPP = (count > 0) ? (int)(sumPP / count) : 0;
- 
-  // Compute relative dB from avgPP
-  float dbRel = ppToRelDb(avgPP, PP_REF);
-  float dbLowest = ppToRelDb(lowestReading, PP_REF);
-  float dbHighest = ppToRelDb(highestReading, PP_REF);
- 
-  bool loud = (avgPP > THRESHOLD);
- 
-  // Serial debug
-  Serial.print("min=");
-  Serial.print(lastMinV);
-  Serial.print(" max=");
-  Serial.print(lastMaxV);
-  Serial.print(" lastPP=");
-  Serial.print(lastPP);
-  Serial.print(" avgPP=");
-  Serial.print(avgPP);
-  Serial.print(" rel_dB=");
-  Serial.print(dbRel, 1);
-  Serial.print(" (ref=");
-  Serial.print(PP_REF);
-  Serial.print(") n=");
-  Serial.print(count);
-  Serial.print(" ");
-  Serial.println(loud ? "LOUD" : "quiet");
- 
-  // LCD output (show dB)
-  lcd.clear();
-  printPadded(0, 0, "Time: " + Helsinki.dateTime("H:i:s"));
-  printPadded(0, 1, "AvgPP: " + String(avgPP) + " Th:" + String(THRESHOLD));
-  printPadded(0, 2, "Rel dB: " + String(dbRel, 1) + " dB");
-  printPadded(0, 3, loud ? "DETECTING SOUND" : "Below threshold");
- 
-  // Build website messages (include dB)
-  String msg2 = "LastPP:" + String(lastPP) + " dB:" + String(dbRel, 1);
-
-  Serial.println("LastPP: " + String(dbRel, 1));
-  Serial.println("maxSound: " + String(maxSound, 1));
+   
+    if ((now - lastDebounceMs) > DEBOUNCE_MS && rawBtn != stableBtn) {
+      stableBtn = rawBtn;
+   
+      if (stableBtn == LOW) {
+        pressStartMs = now;
+        longHoldFired = false;
+        Serial.println("Button: DOWN");
+      } else {
+        unsigned long heldMs = now - pressStartMs;
+        Serial.print("Button: UP (held ");
+        Serial.print(heldMs);
+        Serial.println(" ms)");
+   
+        if (!longHoldFired) {
+          tapCount++;
+          if (tapCount == 1) firstTapReleaseMs = now;
+        } else {
+          tapCount = 0;
+        }
+      }
+    }
+   
+    if (stableBtn == LOW && !longHoldFired) {
+      if (now - pressStartMs >= LONG_HOLD_MS) {
+        longHoldFired = true;
+        tapCount = 0;
+        Serial.println("Button: LONG HOLD");
+      }
+    }
+   
+    if (tapCount > 0 && stableBtn == HIGH) {
+      if (now - firstTapReleaseMs > DOUBLE_TAP_MS) {
+        if (tapCount == 1) Serial.println("Button: SINGLE TAP");
+        else               Serial.println("Button: DOUBLE TAP");
+        tapCount = 0;
+      }
+    }
+   
+    delay(2);
+  } else {
+      
+    uint32_t start = millis();
+    uint32_t sumPP = 0;
+    uint16_t count = 0;
+   
+    int lastPP = 0;
+    int lastMinV = 0, lastMaxV = 0;
   
-  if (dbRel > maxSound) {
-    String newRecord = "New noise record: " + String(dbRel, 1);
-    String oldRecord = "Old record: " + String(maxSound);
-    maxSound = dbRel;
-    //postToSite(TEAM_NAME, newRecord, oldRecord);
-  }
-  String mqttMessage = "Average, " + String(dbRel, 1) + "; " + 
-                        "Min, " + String(dbLowest, 1) + "; " +
-                        "Max, " + String(dbHighest, 1) + ";";
+    int lowestReading = -1;
+    int highestReading = -1;
+    
+    while (millis() - start < UPDATE_INTERVAL_MS) {
+      lastPP = readSoundPP(lastMinV, lastMaxV);
+      sumPP += (uint32_t)lastPP;
+      count++;
+      if (lowestReading == -1 || lowestReading > lastPP) {
+        lowestReading = lastPP;  
+      }
+      if (highestReading < lastPP) {
+        highestReading = lastPP;  
+      }
+      delay(SAMPLE_EVERY_MS);
+    }
+   
+    int avgPP = (count > 0) ? (int)(sumPP / count) : 0;
+   
+    // Compute relative dB from avgPP
+    float dbRel = ppToRelDb(avgPP, PP_REF);
+    float dbLowest = ppToRelDb(lowestReading, PP_REF);
+    float dbHighest = ppToRelDb(highestReading, PP_REF);
+   
+    bool loud = (avgPP > THRESHOLD);
+   
+    // Serial debug
+    Serial.print("min=");
+    Serial.print(lastMinV);
+    Serial.print(" max=");
+    Serial.print(lastMaxV);
+    Serial.print(" lastPP=");
+    Serial.print(lastPP);
+    Serial.print(" avgPP=");
+    Serial.print(avgPP);
+    Serial.print(" rel_dB=");
+    Serial.print(dbRel, 1);
+    Serial.print(" (ref=");
+    Serial.print(PP_REF);
+    Serial.print(") n=");
+    Serial.print(count);
+    Serial.print(" ");
+    Serial.println(loud ? "LOUD" : "quiet");
+   
+    // LCD output (show dB)
+    lcd.clear();
+    printPadded(0, 0, "Time: " + Helsinki.dateTime("H:i:s"));
+    printPadded(0, 1, "AvgPP: " + String(avgPP) + " Th:" + String(THRESHOLD));
+    printPadded(0, 2, "Rel dB: " + String(dbRel, 1) + " dB");
+    printPadded(0, 3, loud ? "DETECTING SOUND" : "Below threshold");
+   
+    // Build website messages (include dB)
+    String msg2 = "LastPP:" + String(lastPP) + " dB:" + String(dbRel, 1);
+  
+    Serial.println("LastPP: " + String(dbRel, 1));
+    Serial.println("maxSound: " + String(maxSound, 1));
+    
+    if (dbRel > maxSound) {
+      String newRecord = "New noise record: " + String(dbRel, 1);
+      String oldRecord = "Old record: " + String(maxSound);
+      maxSound = dbRel;
+      if (publishLocal) {
+        postToSite(TEAM_NAME, newRecord, oldRecord);
+      }
+    }
+    String mqttMessage = "Average, " + String(dbRel, 1) + "; " + 
+                          "Min, " + String(dbLowest, 1) + "; " +
+                          "Max, " + String(dbHighest, 1) + ";";
 
-  client.publish(topic, mqttMessage.c_str());
+    if (publishMqtt) {
+      client.publish(topic, mqttMessage.c_str());
+    }
+  }
 }
