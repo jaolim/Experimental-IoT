@@ -114,19 +114,19 @@ const char* MQTT1_BROKER = ENV_BROKER;
 const int   MQTT1_PORT   = ENV_PORT;
 const char* MQTT1_TOPIC  = ENV_TOPIC;
  
-const char* MQTT2_BROKER = ENV_BROKER_HH3D;
-const int   MQTT2_PORT   = ENV_PORT_HH3D;
-const char* MQTT2_TOPIC  = ENV_TOPIC_HH3D;
+//const char* MQTT2_BROKER = ENV_BROKER_HH3D;
+//const int   MQTT2_PORT   = ENV_PORT_HH3D;
+//const char* MQTT2_TOPIC  = ENV_TOPIC_HH3D;
  
 WiFiClient net1;
 WiFiClient net2;
 PubSubClient mqtt1(net1);
-PubSubClient mqtt2(net2);
+//PubSubClient mqtt2(net2);
  
 // reconnect pacing
 unsigned long lastWiFiAttemptMs = 0;
 unsigned long lastMqtt1AttemptMs = 0;
-unsigned long lastMqtt2AttemptMs = 0;
+//unsigned long lastMqtt2AttemptMs = 0;
 const unsigned long WIFI_RETRY_MS  = 5000;
 const unsigned long MQTT_RETRY_MS  = 5000;
  
@@ -270,19 +270,20 @@ void ensureMqtt(unsigned long now) {
   if (WiFi.status() != WL_CONNECTED) return;
  
   mqtt1.loop();
-  mqtt2.loop();
+  //mqtt2.loop();
  
   if (!mqtt1.connected() && (now - lastMqtt1AttemptMs >= MQTT_RETRY_MS)) {
     lastMqtt1AttemptMs = now;
     Serial.println("MQTT1: reconnect attempt");
     connectMqttClient(mqtt1, MQTT1_BROKER, MQTT1_PORT, "m1");
   }
- 
+ /*
   if (!mqtt2.connected() && (now - lastMqtt2AttemptMs >= MQTT_RETRY_MS)) {
     lastMqtt2AttemptMs = now;
     Serial.println("MQTT2: reconnect attempt");
     connectMqttClient(mqtt2, MQTT2_BROKER, MQTT2_PORT, "m2");
   }
+  */
 }
  
 // ===================== Menu Draw =====================
@@ -427,7 +428,7 @@ void setup() {
  
   // init MQTT servers
   mqtt1.setServer(MQTT1_BROKER, MQTT1_PORT);
-  mqtt2.setServer(MQTT2_BROKER, MQTT2_PORT);
+  //mqtt2.setServer(MQTT2_BROKER, MQTT2_PORT);
  
   // attempt initial connects (non-fatal if fail)
   ensureWiFi(millis());
@@ -501,8 +502,8 @@ void loop() {
  
   // Choose destination based on menu selection
   const char* chosenPostUrl = (sendTarget == TARGET_MOSQUITTO) ? POST_URL_MOSQUITTO : POST_URL_HH3D;
-  PubSubClient& chosenMqtt  = (sendTarget == TARGET_MOSQUITTO) ? mqtt1 : mqtt2;
-  const char* chosenTopic   = (sendTarget == TARGET_MOSQUITTO) ? MQTT1_TOPIC : MQTT2_TOPIC;
+  PubSubClient& chosenMqtt  = (sendTarget == TARGET_MOSQUITTO) ? mqtt1 : mqtt1;
+  const char* chosenTopic   = (sendTarget == TARGET_MOSQUITTO) ? MQTT1_TOPIC : MQTT1_TOPIC;
  
   // Record logic (POST only to chosen target)
 
