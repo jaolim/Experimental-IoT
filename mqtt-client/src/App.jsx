@@ -47,13 +47,13 @@ export function SoundChart({ data }) {
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="timeLabel" interval="preserveStartEnd" />
         <YAxis
-          domain={[domainMin, domainMax]}
+          //domain={[domainMin, domainMax]}
           tickCount={Math.min(20, Math.max(6, Math.round((domainMax - domainMin) * 10) + 1))}
           tickFormatter={(v) => v.toFixed(1)}
-          allowDecimals={true}
+         // allowDecimals={true}
         />
         <Tooltip
-          formatter={(value) => `${Number(value).toFixed(1)} dB`}
+          formatter={(value) => `${Number(value).toFixed(1)}`}
           labelFormatter={(label) => `Time: ${label}`}
         />
         <Legend />
@@ -78,8 +78,8 @@ export function SoundChart({ data }) {
 }
 
 export default function App() {
-  const [brokerUrl, setBrokerUrl] = useState('');
-  const [topic, setTopic] = useState('');
+  const [brokerUrl, setBrokerUrl] = useState('ws://test.mosquitto.org:8080');
+  const [topic, setTopic] = useState('ExpIoT/Noise');
 
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState("Idle");
