@@ -79,10 +79,10 @@ const int SAMPLE_WINDOW_MS = 50;
  
 const uint32_t UPDATE_INTERVAL_MS = 10000;
 const uint32_t SAMPLE_EVERY_MS    = 100;
- 
-int THRESHOLD = 120;
+
 float maxSound = 0;
 int maxSoundPP = 0;
+int highestAverage = 0;
 const int PP_REF = 30;
  
 const char* TEAM_NAME = "J&J";
@@ -91,41 +91,27 @@ const char* LOCATION  = ENV_LOCATION;
 // Cache for instant redraw
 int   lastAvgPP  = 0;
 int   lastLastPP = 0;
-float lastDbRel  = 0.0f;
 bool  lastLoud   = false;
 String lastTimeStr = "";
+String startedTime = "";
  
 // ===================== WiFi =====================
 const char* SSID = ENV_SSID;
 const char* PASSWORD = ENV_PASSWORD;
- 
+
 // ===================== MQTT (dual) =====================
-#ifndef ENV_BROKER_HH3D
-  #define ENV_BROKER_HH3D ENV_BROKER
-#endif
-#ifndef ENV_TOPIC_HH3D
-  #define ENV_TOPIC_HH3D ENV_TOPIC
-#endif
-#ifndef ENV_PORT_HH3D
-  #define ENV_PORT_HH3D ENV_PORT
-#endif
- 
-const char* MQTT1_BROKER = ENV_BROKER;
-const int   MQTT1_PORT   = ENV_PORT;
-const char* MQTT1_TOPIC  = ENV_TOPIC;
- 
-//const char* MQTT2_BROKER = ENV_BROKER_HH3D;
-//const int   MQTT2_PORT   = ENV_PORT_HH3D;
-//const char* MQTT2_TOPIC  = ENV_TOPIC_HH3D;
+const char* MQTT_BROKER = ENV_BROKER;
+const int   MQTT_PORT   = ENV_PORT;
+const char* MQTT_TOPIC  = ENV_TOPIC;
  
 WiFiClient net1;
 WiFiClient net2;
-PubSubClient mqtt1(net1);
+PubSubClient mqtt(net1);
 //PubSubClient mqtt2(net2);
  
 // reconnect pacing
 unsigned long lastWiFiAttemptMs = 0;
-unsigned long lastMqtt1AttemptMs = 0;
+unsigned long lastMqttAttemptMs = 0;
 //unsigned long lastMqtt2AttemptMs = 0;
 const unsigned long WIFI_RETRY_MS  = 5000;
 const unsigned long MQTT_RETRY_MS  = 5000;
@@ -141,7 +127,6 @@ const char* POST_URL_HH3D      = ENV_URL_HH3D;
 // ===================== Prototypes =====================
 void printPadded(uint8_t col, uint8_t row, const String& text);
 String formEncode(const String& s);
-float ppToRelDb(int pp, int ppRef);
 int readSoundPP(int &outMinV, int &outMaxV);
 bool postToSite(const char* postUrl, const String& team, const String& message1, const String& message2);
  
@@ -186,13 +171,7 @@ String formEncode(const String& s) {
   }
   return out;
 }
- 
-float ppToRelDb(int pp, int ppRef) {
-  if (pp < 1) pp = 1;
-  if (ppRef < 1) ppRef = 1;
-  return 20.0f * log10f((float)pp / (float)ppRef);
-}
- 
+
 int readSoundPP(int &outMinV, int &outMaxV) {
   uint32_t start = millis();
   int minV = 4095;
@@ -265,28 +244,21 @@ bool connectMqttClient(PubSubClient& c, const char* broker, int port, const char
   }
   return ok;
 }
- 
+
 void ensureMqtt(unsigned long now) {
   if (WiFi.status() != WL_CONNECTED) return;
  
-  mqtt1.loop();
-  //mqtt2.loop();
+  mqtt.loop();
  
-  if (!mqtt1.connected() && (now - lastMqtt1AttemptMs >= MQTT_RETRY_MS)) {
-    lastMqtt1AttemptMs = now;
-    Serial.println("MQTT1: reconnect attempt");
-    connectMqttClient(mqtt1, MQTT1_BROKER, MQTT1_PORT, "m1");
+  if (!mqtt.connected() && (now - lastMqttAttemptMs >= MQTT_RETRY_MS)) {
+    lastMqttAttemptMs = now;
+    Serial.println("MQTT: reconnect attempt");
+    connectMqttClient(mqtt, MQTT_BROKER, MQTT_PORT, "m1");
   }
- /*
-  if (!mqtt2.connected() && (now - lastMqtt2AttemptMs >= MQTT_RETRY_MS)) {
-    lastMqtt2AttemptMs = now;
-    Serial.println("MQTT2: reconnect attempt");
-    connectMqttClient(mqtt2, MQTT2_BROKER, MQTT2_PORT, "m2");
-  }
-  */
 }
  
 // ===================== Menu Draw =====================
+//Sending status selection and target menu
 void drawSetupMenu() {
   lcd.clear();
   printPadded(0, 0, "SETUP");
@@ -295,7 +267,8 @@ void drawSetupMenu() {
   String sendLine = String(menuIndex == 2 ? ">" : " ") + " Sending: " + (sendingEnabled ? "ON" : "OFF");
   printPadded(0, 3, sendLine);
 }
- 
+
+//Sending target selection
 void drawServerMenu() {
   lcd.clear();
   printPadded(0, 0, "SERVER");
@@ -304,13 +277,14 @@ void drawServerMenu() {
   String cur = (sendTarget == TARGET_MOSQUITTO) ? "Send-> Mosquitto" : "Send-> HH3D";
   printPadded(0, 3, cur);
 }
- 
+
+//Current time, sound readings, started time, sending status and target
 void drawNormalScreen() {
   lcd.clear();
   String t = lastTimeStr.length() ? lastTimeStr : Helsinki.dateTime("H:i:s");
   printPadded(0, 0, "Time: " + t);
-  printPadded(0, 1, "AvgPP: " + String(lastAvgPP) + " Th:" + String(THRESHOLD));
-  printPadded(0, 2, "Rel dB: " + String(lastDbRel, 1) + " dB");
+  printPadded(0, 1, "Avg: " + String(lastAvgPP) + " Max: " + String(highestAverage));
+  printPadded(0, 2, "Started at: " + startedTime);
  
   String bottom;
   if (!sendingEnabled) bottom = "Sending OFF";
@@ -397,11 +371,13 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
+  //Led pin initialization
   pinMode(LED_PIN_SEND, OUTPUT);
   pinMode(LED_PIN_MQTT, OUTPUT);
   digitalWrite(LED_PIN_SEND, HIGH);
   digitalWrite(LED_PIN_MQTT, HIGH);
- 
+
+ //Rotary button pin initialization
   pinMode(PIN_A, INPUT_PULLUP);
   pinMode(PIN_B, INPUT_PULLUP);
   pinMode(PIN_SW, INPUT_PULLUP);
@@ -427,8 +403,7 @@ void setup() {
   Helsinki.setLocation("Europe/Helsinki");
  
   // init MQTT servers
-  mqtt1.setServer(MQTT1_BROKER, MQTT1_PORT);
-  //mqtt2.setServer(MQTT2_BROKER, MQTT2_PORT);
+  mqtt.setServer(MQTT_BROKER, MQTT_PORT);
  
   // attempt initial connects (non-fatal if fail)
   ensureWiFi(millis());
@@ -439,6 +414,8 @@ void setup() {
 
   digitalWrite(LED_PIN_SEND, LOW);
   digitalWrite(LED_PIN_SEND, LOW);
+
+  startedTime = Helsinki.dateTime("H:i:s");
 }
  
 void loop() {
@@ -487,32 +464,28 @@ void loop() {
   }
  
   int avgPP = (count > 0) ? (int)(sumPP / count) : 0;
-  float dbRel     = ppToRelDb(avgPP, PP_REF);
-  float dbLowest  = ppToRelDb(lowestReading, PP_REF);
-  float dbHighest = ppToRelDb(highestReading, PP_REF);
-  bool loud = (avgPP > THRESHOLD);
- 
   lastAvgPP   = avgPP;
   lastLastPP  = lastPP;
-  lastDbRel   = dbRel;
-  lastLoud    = loud;
   lastTimeStr = Helsinki.dateTime("H:i:s");
  
   drawNormalScreen();
  
   // Choose destination based on menu selection
   const char* chosenPostUrl = (sendTarget == TARGET_MOSQUITTO) ? POST_URL_MOSQUITTO : POST_URL_HH3D;
-  PubSubClient& chosenMqtt  = (sendTarget == TARGET_MOSQUITTO) ? mqtt1 : mqtt1;
-  const char* chosenTopic   = (sendTarget == TARGET_MOSQUITTO) ? MQTT1_TOPIC : MQTT1_TOPIC;
+  PubSubClient& chosenMqtt  = mqtt;
+  const char* chosenTopic   = MQTT_TOPIC;
  
-  // Record logic (POST only to chosen target)
-
+  // Record sound record
   if (highestReading > maxSoundPP) {
-    String newRecord = "New noise record: " + String(highestReading);
-    String oldRecord = "Old record: " + String(maxSoundPP);
     maxSoundPP = highestReading;
-//    postToSite(chosenPostUrl, TEAM_NAME, newRecord, oldRecord);
   }
+
+  // Record average
+  if (avgPP > highestAverage) {
+    highestAverage = avgPP;  
+  }
+
+  //Local publishing
   if (sendingEnabled && serverIndex == 1) {
     String localMessage1 = "Noise last reading: Avg = " + String(avgPP) +
                     ", Min = " + String(lowestReading) +
@@ -521,7 +494,7 @@ void loop() {
     postToSite(chosenPostUrl, TEAM_NAME, localMessage1, localMessage2);
   }
   
-  // MQTT publish only to chosen broker/topic
+  // MQTT publishing
   if (sendingEnabled && WiFi.status() == WL_CONNECTED && serverIndex == 0) {
     String mqttMessage = "Average, " + String(avgPP) + "; " +
                          "Min, " + String(lowestReading) + "; " +
