@@ -83,15 +83,14 @@ const uint32_t SAMPLE_EVERY_MS    = 100;
 float maxSound = 0;
 int maxSoundPP = 0;
 int highestAverage = 0;
-const int PP_REF = 30;
- 
-const char* TEAM_NAME = "J&J";
+
+
+const char* TEAM_NAME = ENV_SENDER;
 const char* LOCATION  = ENV_LOCATION;
  
 // Cache for instant redraw
 int   lastAvgPP  = 0;
 int   lastLastPP = 0;
-bool  lastLoud   = false;
 String lastTimeStr = "";
 String startedTime = "";
  
@@ -99,15 +98,13 @@ String startedTime = "";
 const char* SSID = ENV_SSID;
 const char* PASSWORD = ENV_PASSWORD;
 
-// ===================== MQTT (dual) =====================
+// ===================== MQTT =====================
 const char* MQTT_BROKER = ENV_BROKER;
 const int   MQTT_PORT   = ENV_PORT;
 const char* MQTT_TOPIC  = ENV_TOPIC;
  
 WiFiClient net1;
-WiFiClient net2;
 PubSubClient mqtt(net1);
-//PubSubClient mqtt2(net2);
  
 // reconnect pacing
 unsigned long lastWiFiAttemptMs = 0;
@@ -116,13 +113,9 @@ unsigned long lastMqttAttemptMs = 0;
 const unsigned long WIFI_RETRY_MS  = 5000;
 const unsigned long MQTT_RETRY_MS  = 5000;
  
-// ===================== HTTP URLs (dual) =====================
-#ifndef ENV_URL_HH3D
-  #define ENV_URL_HH3D ENV_URL
-#endif
+// Local URL
  
-const char* POST_URL_MOSQUITTO = ENV_URL;
-const char* POST_URL_HH3D      = ENV_URL_HH3D;
+const char* POST_URL_HH3D = ENV_URL;
  
 // ===================== Prototypes =====================
 void printPadded(uint8_t col, uint8_t row, const String& text);
@@ -471,7 +464,7 @@ void loop() {
   drawNormalScreen();
  
   // Choose destination based on menu selection
-  const char* chosenPostUrl = (sendTarget == TARGET_MOSQUITTO) ? POST_URL_MOSQUITTO : POST_URL_HH3D;
+  //const char* chosenPostUrl = (sendTarget == TARGET_MOSQUITTO) ? POST_URL_MOSQUITTO : POST_URL_HH3D;
   PubSubClient& chosenMqtt  = mqtt;
   const char* chosenTopic   = MQTT_TOPIC;
  
@@ -491,7 +484,7 @@ void loop() {
                     ", Min = " + String(lowestReading) +
                     ", Max = " + String(highestReading);
     String localMessage2 = "Noise Record = " + String(maxSoundPP);
-    postToSite(chosenPostUrl, TEAM_NAME, localMessage1, localMessage2);
+    postToSite(POST_URL_HH3D, TEAM_NAME, localMessage1, localMessage2);
   }
   
   // MQTT publishing
