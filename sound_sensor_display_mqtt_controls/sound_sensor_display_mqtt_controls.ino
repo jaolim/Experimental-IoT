@@ -52,7 +52,7 @@ bool lastRawBtn = HIGH;
 unsigned long lastBtnChangeMs = 0;
  
 // ===================== UI Menu =====================
-enum UiState { UI_NORMAL, UI_SETUP_MENU, UI_SERVER_MENU };
+enum UiState { UI_NORMAL, UI_SETUP_MENU, UI_SERVER_MENU, UI_STORAGE_MENU };
 UiState ui = UI_NORMAL;
  
 // SETUP menu items: 0 Exit, 1 Server, 2 Sending ON/OFF
@@ -61,6 +61,11 @@ const int SETUP_ITEMS = 3;
  
 // SERVER menu items: 0 Mosquitto, 1 HH3D
 int serverIndex = 0;
+const int SERVER_ITEMS = 3;
+
+// Storage menu items
+int storageIndex = 0;
+const int STORAGE_ITEMS = 3;
  
 enum SendTarget { TARGET_MOSQUITTO, TARGET_HH3D };
 SendTarget sendTarget = TARGET_MOSQUITTO;
@@ -125,6 +130,7 @@ bool postToSite(const char* postUrl, const String& team, const String& message1,
  
 void drawSetupMenu();
 void drawServerMenu();
+void drawStorageMenu();
 void drawNormalScreen();
 void handleEncoderAndButton(unsigned long now);
  
@@ -257,8 +263,9 @@ void drawSetupMenu() {
   printPadded(0, 0, "SETUP");
   printPadded(0, 1, String(menuIndex == 0 ? ">" : " ") + " Exit");
   printPadded(0, 2, String(menuIndex == 1 ? ">" : " ") + " Server");
-  String sendLine = String(menuIndex == 2 ? ">" : " ") + " Sending: " + (sendingEnabled ? "ON" : "OFF");
-  printPadded(0, 3, sendLine);
+  printPadded(0, 3, String(menuIndex == 2 ? ">" : " ") + " TODO");
+  //String sendLine = String(menuIndex == 2 ? ">" : " ") + " Sending: " + (sendingEnabled ? "ON" : "OFF");
+  //printPadded(0, 3, sendLine);
 }
 
 //Sending target selection
@@ -267,8 +274,19 @@ void drawServerMenu() {
   printPadded(0, 0, "SERVER");
   printPadded(0, 1, String(serverIndex == 0 ? ">" : " ") + " Mosquitto");
   printPadded(0, 2, String(serverIndex == 1 ? ">" : " ") + " HH3D");
-  String cur = (sendTarget == TARGET_MOSQUITTO) ? "Send-> Mosquitto" : "Send-> HH3D";
-  printPadded(0, 3, cur);
+  //String cur = (sendTarget == TARGET_MOSQUITTO) ? "Send-> Mosquitto" : "Send-> HH3D";
+  //printPadded(0, 3, cur);
+  String sendLine = String(serverIndex == 2 ? ">" : " ") + " Sending: " + (sendingEnabled ? "ON" : "OFF");
+  printPadded(0, 3, sendLine);
+}
+
+//Local storage menu
+void drawStorageMenu() {
+  lcd.clear();
+  printPadded(0, 0, "STORAGE");
+  printPadded(0, 1, String(storageIndex == 0 ? ">" : " ") + " Placeholder1");
+  printPadded(0, 2, String(storageIndex == 1 ? ">" : " ") + " Placeholder2");
+  printPadded(0, 3, String(storageIndex == 2 ? ">" : " ") + " EXIT");
 }
 
 //Current time, sound readings, started time, sending status and target
@@ -309,10 +327,17 @@ void handleEncoderAndButton(unsigned long now) {
       drawSetupMenu();
     } else if (ui == UI_SERVER_MENU) {
       serverIndex += (delta > 0 ? 1 : -1);
-      if (serverIndex < 0) serverIndex = 1;
-      if (serverIndex > 1) serverIndex = 0;
+      if (serverIndex < 0) serverIndex = SERVER_ITEMS - 1;
+      //if (serverIndex < 0) serverIndex = 1;
+      if (serverIndex >= SERVER_ITEMS) serverIndex = 0;
+      //if (serverIndex > 1) serverIndex = 0;
       drawServerMenu();
-    }
+    } else if (ui == UI_STORAGE_MENU) {
+      storageIndex += (delta > 0 ? 1 : -1);
+      if (storageIndex < 0) storageIndex = STORAGE_ITEMS - 1;
+      if (storageIndex >= STORAGE_ITEMS) storageIndex = 0;
+      drawStorageMenu();
+      }
   }
  
   // ---- Button debounce ----
@@ -325,8 +350,9 @@ void handleEncoderAndButton(unsigned long now) {
  
   if ((now - lastBtnChangeMs) > BTN_DEBOUNCE_MS && rawBtn != stableBtn) {
     stableBtn = rawBtn;
- 
+    Serial.println("Click!");
     if (stableBtn == LOW) {
+      
       if (ui == UI_NORMAL) {
         ui = UI_SETUP_MENU;
         menuIndex = 0;
@@ -343,16 +369,48 @@ void handleEncoderAndButton(unsigned long now) {
           serverIndex = (sendTarget == TARGET_MOSQUITTO) ? 0 : 1;
           drawServerMenu();
         } else if (menuIndex == 2) {
-          sendingEnabled = !sendingEnabled;
-          drawSetupMenu();
+          ui = UI_STORAGE_MENU;
+          drawStorageMenu();
         }
         return;
       }
- 
+
+ /*
       if (ui == UI_SERVER_MENU) {
         sendTarget = (serverIndex == 0) ? TARGET_MOSQUITTO : TARGET_HH3D;
         ui = UI_SETUP_MENU;
         drawSetupMenu();
+        return;
+      } 
+      */
+      if (ui == UI_SERVER_MENU) {
+        if (serverIndex == 0) {
+          sendTarget = TARGET_MOSQUITTO;
+          ui = UI_SETUP_MENU;  
+          drawSetupMenu();
+        } else if (serverIndex == 1) {
+          sendTarget = TARGET_HH3D;
+          ui = UI_SETUP_MENU;  
+          drawSetupMenu();
+        } else if (serverIndex == 2) {
+          sendingEnabled = !sendingEnabled;
+          ui = UI_SETUP_MENU;
+          drawSetupMenu();
+        }
+        return;
+      }
+      if (ui = UI_STORAGE_MENU){
+        
+        if (storageIndex == 0) {
+          ui = UI_SETUP_MENU;
+          drawSetupMenu();
+        } else if (storageIndex == 1) {
+          ui = UI_SETUP_MENU;
+          drawSetupMenu();
+        } else if (storageIndex == 2) {
+          ui = UI_SETUP_MENU;
+          drawSetupMenu();
+        }
         return;
       }
     }
