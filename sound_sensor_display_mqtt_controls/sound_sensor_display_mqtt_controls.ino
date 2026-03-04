@@ -7,10 +7,14 @@
 #include <WiFiClientSecure.h>
 #include <math.h>
 #include <PubSubClient.h>
+#include <LittleFS.h>
 
 //Leds
 const int LED_PIN_SEND = 26;
 const int LED_PIN_MQTT = 27;
+
+//Local storage
+const char* LOCAL_SETTINGS = "/saved_settings.txt";
  
 // ===================== Rotary Encoder + Button =====================
 // A=GPIO16 (CLK), B=GPIO17 (DT), SW=GPIO18 (to GND), INPUT_PULLUP
@@ -52,7 +56,7 @@ bool lastRawBtn = HIGH;
 unsigned long lastBtnChangeMs = 0;
  
 // ===================== UI Menu =====================
-enum UiState { UI_NORMAL, UI_SETUP_MENU, UI_SERVER_MENU, UI_STORAGE_MENU };
+enum UiState { UI_NORMAL, UI_SETUP_MENU, UI_SERVER_MENU, UI_SETTINGS_MENU };
 UiState ui = UI_NORMAL;
  
 // SETUP menu items: 0 Exit, 1 Server, 2 Sending ON/OFF
@@ -64,13 +68,13 @@ int serverIndex = 0;
 const int SERVER_ITEMS = 3;
 
 // Storage menu items
-int storageIndex = 0;
-const int STORAGE_ITEMS = 3;
+int settingsIndex = 0;
+const int SETTINGS_ITEMS = 3;
  
 enum SendTarget { TARGET_MOSQUITTO, TARGET_HH3D };
 SendTarget sendTarget = TARGET_MOSQUITTO;
  
-bool sendingEnabled = true;
+bool sendingEnabled = false;
  
 // ===================== LCD / Time / Sound =====================
 Timezone Helsinki;
@@ -130,13 +134,73 @@ bool postToSite(const char* postUrl, const String& team, const String& message1,
  
 void drawSetupMenu();
 void drawServerMenu();
-void drawStorageMenu();
+void drawSettingsMenu();
 void drawNormalScreen();
 void handleEncoderAndButton(unsigned long now);
+void readSettings();
+void writeSettings();
  
 void ensureWiFi(unsigned long now);
 void ensureMqtt(unsigned long now);
 bool connectMqttClient(PubSubClient& c, const char* broker, int port, const char* nameTag);
+
+//Settings
+void writeSettings () {
+  String target;
+  String sending;
+  if (sendTarget == TARGET_MOSQUITTO) {
+    target = "MOS";  
+  } else {
+    target = "HH3";
+  }
+  if (sendingEnabled) {
+      sending = "1";
+  } else {
+    sending = "0";  
+  }
+  File settingsFile = LittleFS.open(LOCAL_SETTINGS, FILE_WRITE);
+  if (settingsFile) {
+    settingsFile.println(target + "\n" + sending);
+    settingsFile.close();
+    Serial.println("Settings saved");
+    Serial.println("Send target: " + target);
+    Serial.println("Sending (1 = on, 0 = off): " + sending);
+  } else {
+    Serial.println("Error opening settings file");  
+  }
+}
+
+void readSettings (){
+  if (LittleFS.exists(LOCAL_SETTINGS)) {
+    File settingsFile = LittleFS.open(LOCAL_SETTINGS, FILE_READ);
+    /*
+    while (settingsFile.available()){
+      Serial.println(settingsFile.read());
+    }
+    */
+    String target = settingsFile.readStringUntil('\n');
+    String sending = settingsFile.readStringUntil('\n');
+    settingsFile.close();
+    if (target == "MOS") {
+      sendTarget = TARGET_MOSQUITTO;
+    } else if (target == "HH3"){
+        sendTarget = TARGET_HH3D;
+      }
+    if (sending == "1") {
+      sendingEnabled = true;  
+    } else {
+      sendingEnabled = false;  
+    }
+    Serial.println("Send target: " + target);
+    Serial.println("Sending (1 = on, 0 = off): " + sending);
+  }
+}
+
+void defaultSettings () {
+  sendTarget = TARGET_MOSQUITTO;
+  sendingEnabled = false;
+  writeSettings();
+}
  
 // ===================== Helpers =====================
 void printPadded(uint8_t col, uint8_t row, const String& text) {
@@ -263,7 +327,7 @@ void drawSetupMenu() {
   printPadded(0, 0, "SETUP");
   printPadded(0, 1, String(menuIndex == 0 ? ">" : " ") + " Exit");
   printPadded(0, 2, String(menuIndex == 1 ? ">" : " ") + " Server");
-  printPadded(0, 3, String(menuIndex == 2 ? ">" : " ") + " TODO");
+  printPadded(0, 3, String(menuIndex == 2 ? ">" : " ") + " Settings");
   //String sendLine = String(menuIndex == 2 ? ">" : " ") + " Sending: " + (sendingEnabled ? "ON" : "OFF");
   //printPadded(0, 3, sendLine);
 }
@@ -280,13 +344,13 @@ void drawServerMenu() {
   printPadded(0, 3, sendLine);
 }
 
-//Local storage menu
-void drawStorageMenu() {
+//Settings menu
+void drawSettingsMenu() {
   lcd.clear();
-  printPadded(0, 0, "STORAGE");
-  printPadded(0, 1, String(storageIndex == 0 ? ">" : " ") + " Placeholder1");
-  printPadded(0, 2, String(storageIndex == 1 ? ">" : " ") + " Placeholder2");
-  printPadded(0, 3, String(storageIndex == 2 ? ">" : " ") + " EXIT");
+  printPadded(0, 0, "SETTINGS");
+  printPadded(0, 1, String(settingsIndex == 0 ? ">" : " ") + " Exit");
+  printPadded(0, 2, String(settingsIndex == 1 ? ">" : " ") + " Reset Defaults");
+  printPadded(0, 3, String(settingsIndex == 2 ? ">" : " ") + " Save Settings");
 }
 
 //Current time, sound readings, started time, sending status and target
@@ -332,11 +396,11 @@ void handleEncoderAndButton(unsigned long now) {
       if (serverIndex >= SERVER_ITEMS) serverIndex = 0;
       //if (serverIndex > 1) serverIndex = 0;
       drawServerMenu();
-    } else if (ui == UI_STORAGE_MENU) {
-      storageIndex += (delta > 0 ? 1 : -1);
-      if (storageIndex < 0) storageIndex = STORAGE_ITEMS - 1;
-      if (storageIndex >= STORAGE_ITEMS) storageIndex = 0;
-      drawStorageMenu();
+    } else if (ui == UI_SETTINGS_MENU) {
+      settingsIndex += (delta > 0 ? 1 : -1);
+      if (settingsIndex < 0) settingsIndex = SETTINGS_ITEMS - 1;
+      if (settingsIndex >= SETTINGS_ITEMS) settingsIndex = 0;
+      drawSettingsMenu();
       }
   }
  
@@ -369,8 +433,8 @@ void handleEncoderAndButton(unsigned long now) {
           serverIndex = (sendTarget == TARGET_MOSQUITTO) ? 0 : 1;
           drawServerMenu();
         } else if (menuIndex == 2) {
-          ui = UI_STORAGE_MENU;
-          drawStorageMenu();
+          ui = UI_SETTINGS_MENU;
+          drawSettingsMenu();
         }
         return;
       }
@@ -399,15 +463,17 @@ void handleEncoderAndButton(unsigned long now) {
         }
         return;
       }
-      if (ui = UI_STORAGE_MENU){
+      if (ui = UI_SETTINGS_MENU){
         
-        if (storageIndex == 0) {
+        if (settingsIndex == 0) {
           ui = UI_SETUP_MENU;
           drawSetupMenu();
-        } else if (storageIndex == 1) {
+        } else if (settingsIndex == 1) {
+          defaultSettings();
           ui = UI_SETUP_MENU;
           drawSetupMenu();
-        } else if (storageIndex == 2) {
+        } else if (settingsIndex == 2) {
+          writeSettings();
           ui = UI_SETUP_MENU;
           drawSetupMenu();
         }
@@ -427,6 +493,15 @@ void setup() {
   pinMode(LED_PIN_MQTT, OUTPUT);
   digitalWrite(LED_PIN_SEND, HIGH);
   digitalWrite(LED_PIN_MQTT, HIGH);
+
+  //log initialization
+   if (!LittleFS.begin(true)) {
+    Serial.println("LittleFS: Error in initalization");
+    return;
+  }
+
+  //Read saved settings
+  readSettings();
 
  //Rotary button pin initialization
   pinMode(PIN_A, INPUT_PULLUP);
@@ -554,4 +629,30 @@ void loop() {
       chosenMqtt.publish(chosenTopic, mqttMessage.c_str());
     }
   }
+  //Logging
+  /*
+  if (logging) {
+    String logEntry = "Time, " + String(Helsinki.dateTime("H:i:s")) + "; " +
+                         "Average, " + String(avgPP) + "; " +
+                         "Min, " + String(lowestReading) + "; " +
+                         "Max, " + String(highestReading) + ";";
+    File writeLogFile = LittleFS.open(LOCAL_LOG, FILE_WRITE);
+    if (writeLogFile) {
+      writeLogFile.println(logEntry);
+      writeLogFile.close();
+      Serial.println("Entry logged");
+    } else {
+      Serial.println("Error opening log file");  
+    }
+  }
+  
+  if (LittleFS.exists(LOCAL_SETTINGS)) {
+    File readLogFile = LittleFS.open(LOCAL_SETTINGS, FILE_READ);
+    while (readLogFile.available()){
+      Serial.write(readLogFile.read());  
+    }
+    readLogFile.close();
+  }
+  */
+  
 }
