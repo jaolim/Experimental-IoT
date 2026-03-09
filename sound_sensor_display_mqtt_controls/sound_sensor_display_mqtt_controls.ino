@@ -21,11 +21,38 @@ const char* LOCAL_SETTINGS = "/saved_settings.txt";
 const int PIN_A  = 16;
 const int PIN_B  = 17;
 const int PIN_SW = 18;
- 
+
+volatile long encCount = 0;
+volatile uint8_t prevAB = 0;
+
+const int8_t ENC_TABLE[16] = {
+   0, -1, +1,  0,
+  +1,  0,  0, -1,
+  -1,  0,  0, +1,
+   0, +1, -1,  0
+};
+
+void IRAM_ATTR onEncISR() {
+  uint8_t a = (uint8_t)digitalRead(PIN_A);
+  uint8_t b = (uint8_t)digitalRead(PIN_B);
+  uint8_t currAB = (a << 1) | b;
+  uint8_t idx = (prevAB << 2) | currAB;
+  int8_t step = ENC_TABLE[idx];
+  if (step) encCount += step;
+  prevAB = currAB;
+}
+
+const int COUNTS_PER_DETENT = 4;
+long lastDetent = 0;
+const unsigned long BTN_DEBOUNCE_MS = 80;
+bool stableBtn = HIGH;
+bool lastRawBtn = HIGH;
+unsigned long lastBtnChangeMs = 0;
+ /*
 // ---- Encoder (robust quadrature table) ----
 volatile long encCount = 0;
 volatile uint8_t prevAB = 0;
- 
+
 const int8_t ENC_TABLE[16] = {
    0, -1, +1,  0,
   +1,  0,  0, -1,
@@ -49,11 +76,14 @@ void IRAM_ATTR onEncISR() {
 const int COUNTS_PER_DETENT = 4;
 long lastDetent = 0;
  
+
+ 
 // ---- Button debounce ----
 const unsigned long BTN_DEBOUNCE_MS = 80;
 bool stableBtn = HIGH;
 bool lastRawBtn = HIGH;
 unsigned long lastBtnChangeMs = 0;
+*/
  
 // ===================== UI Menu =====================
 enum UiState { UI_NORMAL, UI_SETUP_MENU, UI_SERVER_MENU, UI_SETTINGS_MENU };
@@ -401,22 +431,30 @@ void handleEncoderAndButton(unsigned long now) {
     long delta = detent - lastDetent;
     lastDetent = detent;
  
-    if (ui == UI_SETUP_MENU) {
+    if (ui == UI_SETUP_MENU) {/*
       menuIndex += (delta > 0 ? 1 : -1);
       if (menuIndex < 0) menuIndex = SETUP_ITEMS - 1;
       if (menuIndex >= SETUP_ITEMS) menuIndex = 0;
+      */
+      menuIndex = (menuIndex + (delta > 0 ? 1 : -1) + SETUP_ITEMS) % SETUP_ITEMS;
       drawSetupMenu();
     } else if (ui == UI_SERVER_MENU) {
+      /*
       serverIndex += (delta > 0 ? 1 : -1);
       if (serverIndex < 0) serverIndex = SERVER_ITEMS - 1;
       //if (serverIndex < 0) serverIndex = 1;
       if (serverIndex >= SERVER_ITEMS) serverIndex = 0;
       //if (serverIndex > 1) serverIndex = 0;
+      */
+      serverIndex = (serverIndex + (delta > 0 ? 1 : -1) + SERVER_ITEMS) % SERVER_ITEMS;
       drawServerMenu();
     } else if (ui == UI_SETTINGS_MENU) {
+      /*
       settingsIndex += (delta > 0 ? 1 : -1);
       if (settingsIndex < 0) settingsIndex = SETTINGS_ITEMS - 1;
       if (settingsIndex >= SETTINGS_ITEMS) settingsIndex = 0;
+      */
+      settingsIndex = (settingsIndex + (delta > 0 ? 1 : -1) + SETTINGS_ITEMS) % SETTINGS_ITEMS;
       drawSettingsMenu();
       }
   }
@@ -438,10 +476,8 @@ void handleEncoderAndButton(unsigned long now) {
         ui = UI_SETUP_MENU;
         menuIndex = 0;
         drawSetupMenu();
-        return;
-      }
- 
-      if (ui == UI_SETUP_MENU) {
+      } else if (ui == UI_SETUP_MENU) {
+        /*
         if (menuIndex == 0) {
           ui = UI_NORMAL;
           drawNormalScreen();
@@ -454,9 +490,12 @@ void handleEncoderAndButton(unsigned long now) {
           drawSettingsMenu();
         }
         return;
-      }
-      
-      if (ui == UI_SERVER_MENU) {
+        */
+        if (menuIndex == 0) { ui = UI_NORMAL; drawNormalScreen(); }
+        else if (menuIndex == 1) { ui = UI_SERVER_MENU; serverIndex = (sendTarget == TARGET_MOSQUITTO) ? 0 : 1; drawServerMenu(); }
+        else if (menuIndex == 2) { ui = UI_SETTINGS_MENU; drawSettingsMenu(); }
+      }else if (ui == UI_SERVER_MENU) {
+        /*
         if (serverIndex == 0) {
           sendTarget = TARGET_MOSQUITTO;
           ui = UI_SETUP_MENU;  
@@ -471,9 +510,14 @@ void handleEncoderAndButton(unsigned long now) {
           drawSetupMenu();
         }
         return;
-      }
-      if (ui = UI_SETTINGS_MENU){
-        
+        */
+        if (serverIndex == 0) sendTarget = TARGET_MOSQUITTO;
+        else if (serverIndex == 1) sendTarget = TARGET_HH3D;
+        else if (serverIndex == 2) sendingEnabled = !sendingEnabled;
+        ui = UI_SETUP_MENU;
+        drawSetupMenu();
+      } else if (ui == UI_SETTINGS_MENU){
+        /*
         if (settingsIndex == 0) {
           ui = UI_SETUP_MENU;
           drawSetupMenu();
@@ -487,6 +531,10 @@ void handleEncoderAndButton(unsigned long now) {
           drawSetupMenu();
         }
         return;
+        */
+        if (settingsIndex == 0) { ui = UI_SETUP_MENU; drawSetupMenu(); }
+        else if (settingsIndex == 1) { defaultSettings(); ui = UI_NORMAL; drawNormalScreen(); }
+        else if (settingsIndex == 2) { writeSettings(); ui = UI_NORMAL; drawNormalScreen(); }
       }
     }
   }
