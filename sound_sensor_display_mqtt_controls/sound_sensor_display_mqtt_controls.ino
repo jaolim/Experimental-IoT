@@ -93,7 +93,6 @@ float maxSound = 0;
 int maxSoundPP = 0;
 int highestAverage = 0;
 
-
 const char* TEAM_NAME = ENV_SENDER;
 const char* LOCATION  = ENV_LOCATION;
  
@@ -123,7 +122,6 @@ const unsigned long WIFI_RETRY_MS  = 5000;
 const unsigned long MQTT_RETRY_MS  = 5000;
  
 // Local URL
- 
 const char* POST_URL_HH3D = ENV_URL;
  
 // ===================== Prototypes =====================
@@ -154,9 +152,9 @@ void writeSettings () {
     target = "HH3";
   }
   if (sendingEnabled) {
-      sending = "1";
+      sending = "ON";
   } else {
-    sending = "0";  
+    sending = "OFF";  
   }
   File settingsFile = LittleFS.open(LOCAL_SETTINGS, FILE_WRITE);
   if (settingsFile) {
@@ -173,31 +171,34 @@ void writeSettings () {
 void readSettings (){
   if (LittleFS.exists(LOCAL_SETTINGS)) {
     File settingsFile = LittleFS.open(LOCAL_SETTINGS, FILE_READ);
-    /*
-    while (settingsFile.available()){
-      Serial.println(settingsFile.read());
-    }
-    */
     String target = settingsFile.readStringUntil('\n');
     String sending = settingsFile.readStringUntil('\n');
     settingsFile.close();
     if (target == "MOS") {
+      serverIndex = 0;
       sendTarget = TARGET_MOSQUITTO;
+      Serial.println("Sending target set to Mosquitto");
     } else if (target == "HH3"){
         sendTarget = TARGET_HH3D;
+        erial.println("Sending target set to HH3D");
       }
-    if (sending == "1") {
-      sendingEnabled = true;  
+    if (sending == "ON") {
+      sendingEnabled = true;
+      Serial.println("Sending enabled");
     } else {
-      sendingEnabled = false;  
+      sendingEnabled = false;
+      Serial.println("Sending disabled");
     }
     Serial.println("Send target: " + target);
-    Serial.println("Sending (1 = on, 0 = off): " + sending);
+    Serial.println("Sending: " + sending);
+  } else {
+    Serial.println("Settings file does not exist");  
   }
 }
 
 void defaultSettings () {
   sendTarget = TARGET_MOSQUITTO;
+  serverIndex = 0;
   sendingEnabled = false;
   writeSettings();
 }
@@ -438,15 +439,7 @@ void handleEncoderAndButton(unsigned long now) {
         }
         return;
       }
-
- /*
-      if (ui == UI_SERVER_MENU) {
-        sendTarget = (serverIndex == 0) ? TARGET_MOSQUITTO : TARGET_HH3D;
-        ui = UI_SETUP_MENU;
-        drawSetupMenu();
-        return;
-      } 
-      */
+      
       if (ui == UI_SERVER_MENU) {
         if (serverIndex == 0) {
           sendTarget = TARGET_MOSQUITTO;
@@ -494,14 +487,10 @@ void setup() {
   digitalWrite(LED_PIN_SEND, HIGH);
   digitalWrite(LED_PIN_MQTT, HIGH);
 
-  //log initialization
    if (!LittleFS.begin(true)) {
     Serial.println("LittleFS: Error in initalization");
     return;
   }
-
-  //Read saved settings
-  readSettings();
 
  //Rotary button pin initialization
   pinMode(PIN_A, INPUT_PULLUP);
@@ -542,6 +531,9 @@ void setup() {
   digitalWrite(LED_PIN_SEND, LOW);
 
   startedTime = Helsinki.dateTime("H:i:s");
+
+  //Read saved settings
+  readSettings();
 }
  
 void loop() {
@@ -596,8 +588,6 @@ void loop() {
  
   drawNormalScreen();
  
-  // Choose destination based on menu selection
-  //const char* chosenPostUrl = (sendTarget == TARGET_MOSQUITTO) ? POST_URL_MOSQUITTO : POST_URL_HH3D;
   PubSubClient& chosenMqtt  = mqtt;
   const char* chosenTopic   = MQTT_TOPIC;
  
@@ -629,30 +619,5 @@ void loop() {
       chosenMqtt.publish(chosenTopic, mqttMessage.c_str());
     }
   }
-  //Logging
-  /*
-  if (logging) {
-    String logEntry = "Time, " + String(Helsinki.dateTime("H:i:s")) + "; " +
-                         "Average, " + String(avgPP) + "; " +
-                         "Min, " + String(lowestReading) + "; " +
-                         "Max, " + String(highestReading) + ";";
-    File writeLogFile = LittleFS.open(LOCAL_LOG, FILE_WRITE);
-    if (writeLogFile) {
-      writeLogFile.println(logEntry);
-      writeLogFile.close();
-      Serial.println("Entry logged");
-    } else {
-      Serial.println("Error opening log file");  
-    }
-  }
-  
-  if (LittleFS.exists(LOCAL_SETTINGS)) {
-    File readLogFile = LittleFS.open(LOCAL_SETTINGS, FILE_READ);
-    while (readLogFile.available()){
-      Serial.write(readLogFile.read());  
-    }
-    readLogFile.close();
-  }
-  */
   
 }
