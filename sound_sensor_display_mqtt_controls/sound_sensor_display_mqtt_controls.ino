@@ -162,7 +162,7 @@ void writeSettings () {
     settingsFile.close();
     Serial.println("Settings saved");
     Serial.println("Send target: " + target);
-    Serial.println("Sending (1 = on, 0 = off): " + sending);
+    Serial.println("Sending: " + sending);
   } else {
     Serial.println("Error opening settings file");  
   }
@@ -174,6 +174,22 @@ void readSettings (){
     String target = settingsFile.readStringUntil('\n');
     String sending = settingsFile.readStringUntil('\n');
     settingsFile.close();
+    target.trim();
+    sending.trim();
+/*
+//Comparisons for debugging
+    String targetMos = "MOS";
+    String targetHH3 = "HH3";
+    String sendingOn = "ON";
+    int targetCompareMos = target.compareTo(targetMos);
+    int targetCompareHH3 = target.compareTo(targetHH3);
+    int sendingCompare = sending.compareTo(sendingOn);
+    Serial.println("Target compare MOS: " + String(targetCompareMos));
+    Serial.println("Target compare HH3: " + String(targetCompareHH3));
+    Serial.println("Sending compare: " + String(sendingCompare));
+
+    */
+    
     if (target == "MOS") {
       serverIndex = 0;
       sendTarget = TARGET_MOSQUITTO;
