@@ -180,7 +180,7 @@ void readSettings (){
       Serial.println("Sending target set to Mosquitto");
     } else if (target == "HH3"){
         sendTarget = TARGET_HH3D;
-        erial.println("Sending target set to HH3D");
+        Serial.println("Sending target set to HH3D");
       }
     if (sending == "ON") {
       sendingEnabled = true;
