@@ -9,14 +9,14 @@
 #include <PubSubClient.h>
 #include <LittleFS.h>
 
-//Leds
+// Leds
 const int LED_PIN_SEND = 26;
 const int LED_PIN_MQTT = 27;
 
-//Local storage
+// Local storage
 const char* LOCAL_SETTINGS = "/saved_settings.txt";
  
-// ===================== Rotary Encoder + Button =====================
+// Rotary Encoder + Button
 // A=GPIO16 (CLK), B=GPIO17 (DT), SW=GPIO18 (to GND), INPUT_PULLUP
 const int PIN_A  = 16;
 const int PIN_B  = 17;
@@ -48,44 +48,8 @@ const unsigned long BTN_DEBOUNCE_MS = 80;
 bool stableBtn = HIGH;
 bool lastRawBtn = HIGH;
 unsigned long lastBtnChangeMs = 0;
- /*
-// ---- Encoder (robust quadrature table) ----
-volatile long encCount = 0;
-volatile uint8_t prevAB = 0;
-
-const int8_t ENC_TABLE[16] = {
-   0, -1, +1,  0,
-  +1,  0,  0, -1,
-  -1,  0,  0, +1,
-   0, +1, -1,  0
-};
  
-void IRAM_ATTR onEncISR() {
-  uint8_t a = (uint8_t)digitalRead(PIN_A);
-  uint8_t b = (uint8_t)digitalRead(PIN_B);
-  uint8_t currAB = (a << 1) | b;
- 
-  uint8_t idx = (prevAB << 2) | currAB;
-  int8_t step = ENC_TABLE[idx];
- 
-  if (step) encCount += step;
-  prevAB = currAB;
-}
- 
-// Try 4, or 2/1 depending on your encoder
-const int COUNTS_PER_DETENT = 4;
-long lastDetent = 0;
- 
-
- 
-// ---- Button debounce ----
-const unsigned long BTN_DEBOUNCE_MS = 80;
-bool stableBtn = HIGH;
-bool lastRawBtn = HIGH;
-unsigned long lastBtnChangeMs = 0;
-*/
- 
-// ===================== UI Menu =====================
+// UI menu
 enum UiState { UI_NORMAL, UI_SETUP_MENU, UI_SERVER_MENU, UI_SETTINGS_MENU };
 UiState ui = UI_NORMAL;
  
@@ -106,7 +70,7 @@ SendTarget sendTarget = TARGET_MOSQUITTO;
  
 bool sendingEnabled = false;
  
-// ===================== LCD / Time / Sound =====================
+// LCD / Time / Sound
 Timezone Helsinki;
 LiquidCrystal_I2C lcd(0x27, 20, 4);
  
@@ -132,11 +96,11 @@ int   lastLastPP = 0;
 String lastTimeStr = "";
 String startedTime = "";
  
-// ===================== WiFi =====================
+// WiFi 
 const char* SSID = ENV_SSID;
 const char* PASSWORD = ENV_PASSWORD;
 
-// ===================== MQTT =====================
+// MQTT 
 const char* MQTT_BROKER = ENV_BROKER;
 const int   MQTT_PORT   = ENV_PORT;
 const char* MQTT_TOPIC  = ENV_TOPIC;
@@ -144,7 +108,7 @@ const char* MQTT_TOPIC  = ENV_TOPIC;
 WiFiClient net1;
 PubSubClient mqtt(net1);
  
-// reconnect pacing
+// Reconnect pacing
 unsigned long lastWiFiAttemptMs = 0;
 unsigned long lastMqttAttemptMs = 0;
 //unsigned long lastMqtt2AttemptMs = 0;
@@ -154,7 +118,7 @@ const unsigned long MQTT_RETRY_MS  = 5000;
 // Local URL
 const char* POST_URL_HH3D = ENV_URL;
  
-// ===================== Prototypes =====================
+// Prototypes
 void printPadded(uint8_t col, uint8_t row, const String& text);
 String formEncode(const String& s);
 int readSoundPP(int &outMinV, int &outMaxV);
@@ -172,7 +136,8 @@ void ensureWiFi(unsigned long now);
 void ensureMqtt(unsigned long now);
 bool connectMqttClient(PubSubClient& c, const char* broker, int port, const char* nameTag);
 
-//Settings
+// Settings
+// Write current settings to local storage
 void writeSettings () {
   String target;
   String sending;
@@ -198,6 +163,7 @@ void writeSettings () {
   }
 }
 
+// Read settings from local storage
 void readSettings (){
   if (LittleFS.exists(LOCAL_SETTINGS)) {
     File settingsFile = LittleFS.open(LOCAL_SETTINGS, FILE_READ);
@@ -206,19 +172,6 @@ void readSettings (){
     settingsFile.close();
     target.trim();
     sending.trim();
-/*
-//Comparisons for debugging
-    String targetMos = "MOS";
-    String targetHH3 = "HH3";
-    String sendingOn = "ON";
-    int targetCompareMos = target.compareTo(targetMos);
-    int targetCompareHH3 = target.compareTo(targetHH3);
-    int sendingCompare = sending.compareTo(sendingOn);
-    Serial.println("Target compare MOS: " + String(targetCompareMos));
-    Serial.println("Target compare HH3: " + String(targetCompareHH3));
-    Serial.println("Sending compare: " + String(sendingCompare));
-
-    */
     
     if (target == "MOS") {
       serverIndex = 0;
@@ -242,6 +195,7 @@ void readSettings (){
   }
 }
 
+// Reset settings to default values and save to local storage
 void defaultSettings () {
   sendTarget = TARGET_MOSQUITTO;
   serverIndex = 0;
@@ -249,7 +203,7 @@ void defaultSettings () {
   writeSettings();
 }
  
-// ===================== Helpers =====================
+// Helpers 
 void printPadded(uint8_t col, uint8_t row, const String& text) {
   lcd.setCursor(col, row);
   lcd.print(text);
@@ -322,7 +276,7 @@ bool postToSite(const char* postUrl, const String& team, const String& message1,
   return (httpCode > 0 && httpCode < 400);
 }
  
-// ===================== Reconnect logic =====================
+// Reconnect logic
 void ensureWiFi(unsigned long now) {
   if (WiFi.status() == WL_CONNECTED) return;
  
@@ -367,31 +321,27 @@ void ensureMqtt(unsigned long now) {
   }
 }
  
-// ===================== Menu Draw =====================
-//Sending status selection and target menu
+// Menu Draw
+// Sub-menu selection
 void drawSetupMenu() {
   lcd.clear();
   printPadded(0, 0, "SETUP");
   printPadded(0, 1, String(menuIndex == 0 ? ">" : " ") + " Exit");
   printPadded(0, 2, String(menuIndex == 1 ? ">" : " ") + " Server");
   printPadded(0, 3, String(menuIndex == 2 ? ">" : " ") + " Settings");
-  //String sendLine = String(menuIndex == 2 ? ">" : " ") + " Sending: " + (sendingEnabled ? "ON" : "OFF");
-  //printPadded(0, 3, sendLine);
 }
 
-//Sending target selection
+// Sending target and state selection
 void drawServerMenu() {
   lcd.clear();
   printPadded(0, 0, "SERVER");
   printPadded(0, 1, String(serverIndex == 0 ? ">" : " ") + " Mosquitto");
   printPadded(0, 2, String(serverIndex == 1 ? ">" : " ") + " HH3D");
-  //String cur = (sendTarget == TARGET_MOSQUITTO) ? "Send-> Mosquitto" : "Send-> HH3D";
-  //printPadded(0, 3, cur);
   String sendLine = String(serverIndex == 2 ? ">" : " ") + " Sending: " + (sendingEnabled ? "ON" : "OFF");
   printPadded(0, 3, sendLine);
 }
 
-//Settings menu
+// Settings menu
 void drawSettingsMenu() {
   lcd.clear();
   printPadded(0, 0, "SETTINGS");
@@ -400,7 +350,8 @@ void drawSettingsMenu() {
   printPadded(0, 3, String(settingsIndex == 2 ? ">" : " ") + " Save Settings");
 }
 
-//Current time, sound readings, started time, sending status and target
+// Normal screen
+// Current time, sound readings, started time, sending status and target
 void drawNormalScreen() {
   lcd.clear();
   String t = lastTimeStr.length() ? lastTimeStr : Helsinki.dateTime("H:i:s");
@@ -414,12 +365,12 @@ void drawNormalScreen() {
   printPadded(0, 3, bottom);
 }
  
-// ===================== Input Handling =====================
+// Input Handling
 void handleEncoderAndButton(unsigned long now) {
   ensureWiFi(now);
   ensureMqtt(now);
  
-  // ---- Encoder movement ----
+  // Encoder movement
   long raw;
   noInterrupts();
   raw = encCount;
@@ -431,29 +382,13 @@ void handleEncoderAndButton(unsigned long now) {
     long delta = detent - lastDetent;
     lastDetent = detent;
  
-    if (ui == UI_SETUP_MENU) {/*
-      menuIndex += (delta > 0 ? 1 : -1);
-      if (menuIndex < 0) menuIndex = SETUP_ITEMS - 1;
-      if (menuIndex >= SETUP_ITEMS) menuIndex = 0;
-      */
+    if (ui == UI_SETUP_MENU) {
       menuIndex = (menuIndex + (delta > 0 ? 1 : -1) + SETUP_ITEMS) % SETUP_ITEMS;
       drawSetupMenu();
     } else if (ui == UI_SERVER_MENU) {
-      /*
-      serverIndex += (delta > 0 ? 1 : -1);
-      if (serverIndex < 0) serverIndex = SERVER_ITEMS - 1;
-      //if (serverIndex < 0) serverIndex = 1;
-      if (serverIndex >= SERVER_ITEMS) serverIndex = 0;
-      //if (serverIndex > 1) serverIndex = 0;
-      */
       serverIndex = (serverIndex + (delta > 0 ? 1 : -1) + SERVER_ITEMS) % SERVER_ITEMS;
       drawServerMenu();
     } else if (ui == UI_SETTINGS_MENU) {
-      /*
-      settingsIndex += (delta > 0 ? 1 : -1);
-      if (settingsIndex < 0) settingsIndex = SETTINGS_ITEMS - 1;
-      if (settingsIndex >= SETTINGS_ITEMS) settingsIndex = 0;
-      */
       settingsIndex = (settingsIndex + (delta > 0 ? 1 : -1) + SETTINGS_ITEMS) % SETTINGS_ITEMS;
       drawSettingsMenu();
       }
@@ -477,61 +412,16 @@ void handleEncoderAndButton(unsigned long now) {
         menuIndex = 0;
         drawSetupMenu();
       } else if (ui == UI_SETUP_MENU) {
-        /*
-        if (menuIndex == 0) {
-          ui = UI_NORMAL;
-          drawNormalScreen();
-        } else if (menuIndex == 1) {
-          ui = UI_SERVER_MENU;
-          serverIndex = (sendTarget == TARGET_MOSQUITTO) ? 0 : 1;
-          drawServerMenu();
-        } else if (menuIndex == 2) {
-          ui = UI_SETTINGS_MENU;
-          drawSettingsMenu();
-        }
-        return;
-        */
         if (menuIndex == 0) { ui = UI_NORMAL; drawNormalScreen(); }
         else if (menuIndex == 1) { ui = UI_SERVER_MENU; serverIndex = (sendTarget == TARGET_MOSQUITTO) ? 0 : 1; drawServerMenu(); }
         else if (menuIndex == 2) { ui = UI_SETTINGS_MENU; drawSettingsMenu(); }
       }else if (ui == UI_SERVER_MENU) {
-        /*
-        if (serverIndex == 0) {
-          sendTarget = TARGET_MOSQUITTO;
-          ui = UI_SETUP_MENU;  
-          drawSetupMenu();
-        } else if (serverIndex == 1) {
-          sendTarget = TARGET_HH3D;
-          ui = UI_SETUP_MENU;  
-          drawSetupMenu();
-        } else if (serverIndex == 2) {
-          sendingEnabled = !sendingEnabled;
-          ui = UI_SETUP_MENU;
-          drawSetupMenu();
-        }
-        return;
-        */
         if (serverIndex == 0) sendTarget = TARGET_MOSQUITTO;
         else if (serverIndex == 1) sendTarget = TARGET_HH3D;
         else if (serverIndex == 2) sendingEnabled = !sendingEnabled;
         ui = UI_SETUP_MENU;
         drawSetupMenu();
       } else if (ui == UI_SETTINGS_MENU){
-        /*
-        if (settingsIndex == 0) {
-          ui = UI_SETUP_MENU;
-          drawSetupMenu();
-        } else if (settingsIndex == 1) {
-          defaultSettings();
-          ui = UI_SETUP_MENU;
-          drawSetupMenu();
-        } else if (settingsIndex == 2) {
-          writeSettings();
-          ui = UI_SETUP_MENU;
-          drawSetupMenu();
-        }
-        return;
-        */
         if (settingsIndex == 0) { ui = UI_SETUP_MENU; drawSetupMenu(); }
         else if (settingsIndex == 1) { defaultSettings(); ui = UI_NORMAL; drawNormalScreen(); }
         else if (settingsIndex == 2) { writeSettings(); ui = UI_NORMAL; drawNormalScreen(); }
@@ -540,7 +430,7 @@ void handleEncoderAndButton(unsigned long now) {
   }
 }
  
-// ===================== Setup / Loop =====================
+// Setup
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -556,7 +446,7 @@ void setup() {
     return;
   }
 
- //Rotary button pin initialization
+ // Rotary button pin initialization
   pinMode(PIN_A, INPUT_PULLUP);
   pinMode(PIN_B, INPUT_PULLUP);
   pinMode(PIN_SW, INPUT_PULLUP);
@@ -599,7 +489,8 @@ void setup() {
   //Read saved settings
   readSettings();
 }
- 
+
+// Loop
 void loop() {
   handleEncoderAndButton(millis());
  
