@@ -592,7 +592,7 @@ void setup() {
   drawNormalScreen();
 
   digitalWrite(LED_PIN_SEND, LOW);
-  digitalWrite(LED_PIN_SEND, LOW);
+  digitalWrite(LED_PIN_MQTT, LOW);
 
   startedTime = Helsinki.dateTime("H:i:s");
 
@@ -614,13 +614,13 @@ void loop() {
     digitalWrite(LED_PIN_SEND, LOW);
   }
 
-  if (serverIndex == 0) {
+  if (sendTarget == TARGET_MOSQUITTO) {
     digitalWrite(LED_PIN_MQTT, HIGH);
   } else {
     digitalWrite(LED_PIN_MQTT, LOW);
   }
  
-  // ---- Sound averaging ----
+  // Sound averaging
   uint32_t start = millis();
   uint32_t sumPP = 0;
   uint16_t count = 0;
