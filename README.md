@@ -30,13 +30,45 @@ For saving current settings to local storage or resetting to default settings.
 
 The saved settings are loaded on device reboot if the file can be found.
 
+### Environment
+
+Certain settings are read from *env.h* file which should be in the following format:
+
 **env.h**
+
+```
+const char* ENV_SSID = "network_name";
+const char*  ENV_PASSWORD = "network_password";
+const char* ENV_URL = "local_target_url";
+const char* ENV_BROKER = "broker_url";
+const int ENV_PORT = 1883;
+const char* ENV_TOPIC = "topic/name";
+const char* ENV_LOCATION = "location_name";
+const char* ENV_SENDER = "sender_name_for_local_sending";
+
+```
 
 ### Pictures
 
 #### Full device
 
 ![full device](./Pictures/Device_sending_mqtt.jpg)
+
+#### Main screen
+
+![main screen](./Pictures/Screen_main.jpg)
+
+#### Menu
+
+![main manu](./Pictures/screen_setup_menu.jpg)
+
+#### Server menu
+
+![server menu](./Pictures/screen_server_menu.jpg)
+
+#### Settings menu
+
+![settings menu](./Pictures/screen_settings_menu.jpg)
 
 ## Client app
 
