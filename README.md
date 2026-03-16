@@ -36,7 +36,7 @@ The saved settings are loaded on device reboot if the file can be found.
 
 #### Full device
 
-![full device](Device_sending_mqtt.jpg)
+![full device](./Pictures/Device_sending_mqtt.jpg)
 
 ## Client app
 
