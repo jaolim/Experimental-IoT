@@ -50,6 +50,8 @@ const char* ENV_SENDER = "sender_name_for_local_sending";
 
 ### Pictures
 
+Additional pictures can be found in https://github.com/jaolim/Experimental-IoT/tree/main/Pictures.
+
 #### Full device
 
 ![full device](./Pictures/Device_sending_mqtt.jpg)
